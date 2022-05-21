@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<scrip src="https://cdn.jsdelivr.net/npm/   ootstrap@5.0.0-
+beta1/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="jquery-3.5.0.js"></script>
+</head>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+
+.zoom {
+  cursor: move;
+  fill: none;
+  pointer-events: all;
+}
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 1.5px;
+}
+
+.context .line {
+  stroke-width: 0.5px;
+}
+
+.brush1 .brush .selection {
+  stroke: #fff;
+  fill-opacity: .125;
+  shape-rendering: crispEdges;
+}
+
+.line.highlight {
+    fill-opacity: 1;
+    stroke-opacity: 1;
+}
+.focus .line.highlight {
+    stroke-width: 3;
+}
+.context .line.highlight {
+    stroke-width: 1.0;
+}
+
+.line.fadeout {
+    fill-opacity: 0.2;
+    stroke-opacity: 0.2;
+}
+
+</style>
+<body>
+<script>
+
+var svg_main_width = 1100,
+    svg_main_height = 620;
+
+var context_scale = 1 / 5;
+
+    
+ //////////////// varibale d'ajustement des positions \\\\\\\\\\\\\\\\   
+
+    var marg = {top: 20, right: 80, bottom: 180},
+    margin2 = {top: 550, right: 20, bottom: 50},
+    marg2 = {top: 20, bottom: 420, left: 50};
+    marg3 = {top: 450,  bottom: 50, right:20};
+var combined_render_width = svg_main_width - marg.right + 10 - marg2.left*2 - 10;
+marg2.right = svg_main_width -
+                Math.round(combined_render_width*(context_scale)) -
+                marg2.left;
+marg.left = svg_main_width - marg2.right + 50 + 10;
+var wid = svg_main_width - marg.left - marg.right,
+    wid2 = svg_main_width - marg2.left - marg2.right-50,
+    hei = svg_main_height - marg.top - marg.bottom,
+    hei2 = svg_main_height - marg2.top - marg2.bottom,
+    height2 = +svg_main_height - margin2.top ;
+
+    /////////////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+var parseDate = d3.timeParse("%d %B %Y");
+
+var x = d3.scaleTime().range([0, wid]),
+    x2 = d3.scaleTime().range([0, wid]),
+    x3 = d3.scaleTime().range([0, wid2]);
+var y = d3.scaleLinear().range([hei, 0]),
+    y2 = d3.scaleLinear().range([hei2,0]),
+    y22=d3.scaleLinear().range([0,hei2]),
+    y3 = d3.scaleLinear().range([height2, 0]);
+
+var color = d3.scaleOrdinal(["#ffd28f","#4d9e8e","#412121"]);
+///////////////Definition des axes \\\\\\\\\\\\\\\\\\\\
+var xAxis = d3.axisBottom(x)
+var yAxis = d3.axisLeft(y)
+var yAxis2 = d3.axisLeft(y2)
+var xAxis2 =d3.axisBottom(x2)
+////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//////////////////initialisation des brushs\\\\\\\\\\\\\\\\\\\\\\\\\\\
+var brush1 = d3.brushY() // brush axe y
+    .extent([[0, 0], [wid2, hei2]])
+    .on("brush", brushed1);
+var brush = d3.brushX() // brush axe x
+    .extent([[0, 0], [wid, height2]])
+    .on("brush ", brushed);
+
+var zoom = d3.zoom() // l'espace du zoom 
+    .scaleExtent([1, Infinity])
+    .translateExtent([[0, 0], [wid, hei]])
+    .extent([[0, 0], [wid, hei]])
+    .on("zoom", zoomed);
+
+var line = d3.line()// tracés des lignes selon les données 
+    .x(function(d) { return x(d.date); })
+    .y(function(d) { return y(d.price);})
+    .curve(d3.curveBasis);
+
+var line2 = d3.line()// tracés des lignes dans le contexte selon l'axe x 
+    .x(function(d) { return x2(d.date); })
+    .y(function(d) { return y3(d.price); })
+    .curve(d3.curveBasis);
+
+var line3 =d3.line()//tracés des lignes dans le contexte selon k'axe y 
+    .x(function(d) { return x3(d.date); })
+    .y(function(d) { return y2(d.price); })
+    .curve(d3.curveBasis);
+// création du SVG 
+var svg = d3.select("body").append("svg")
+    .attr("width", svg_main_width)
+    .attr("height", svg_main_height);
+
+svg.append("defs").append("clipPath")
+    .attr("id", "clip")
+  .append("rect")
+    .attr("width", wid)
+    .attr("height", hei);
+//////////////Création du focus et des contextes \\\\\\\\\\\\\\\\\\
+    var focus = svg.append("g")
+    .attr("class", "focus")
+    .attr("transform", "translate(" + marg.left + "," + marg.top + ")");
+
+    var context = svg.append("g")
+    .attr("class", "context")
+    .attr("transform", "translate(" + marg.left+ "," + marg3.top+ ")");
+    var context1 = svg.append("g")
+    .attr("class", "context1")
+    .attr("transform", "translate(" + marg2.left + "," + marg2.top + ")");
+    var legend = svg.append("g")
+    .attr("class", "legend")
+    .attr("transform", "translate(" + marg2.left + "," + (svg_main_height - marg2.bottom + 20) + ")");
+/////////////////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\
+////////////////////////lecture des données et manipulation\\\\\\\\\\\\\\\\\\\\\\\
+d3.csv("gold.csv", function(error, data) {
+  color.domain(d3.keys(data[0]).filter(function(key) { return key !== "date"; }));
+
+  data.forEach(function(d) {
+    d.date = parseDate(d.date);// convertir en format date 
+  });
+
+  var golds = color.domain().map(function(name) {
+    return {
+      name: name,
+      values: data.map(function(d) {
+        return {date: d.date, price: +d[name]};
+      })
+    };
+  });
+//////////////////////////ajuster les domaines des axes \\\\\\\\\\\\\\\
+  x.domain(d3.extent(data, function(d) { return d.date; }));
+  x2.domain(d3.extent(data, function(d) { return d.date; }));
+  x3.domain(d3.extent(data, function(d) { return d.date; }));
+
+  y.domain([
+    d3.min(golds, function(c) { return d3.min(c.values, function(v) { return v.price; }); }),
+    d3.max(golds, function(c) { return d3.max(c.values, function(v) { return v.price; }); })
+  ]);
+
+  y2.domain(y.domain());
+  y3.domain(y.domain());
+  ////////////////////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\
+ /////////////////////////formation des axes\\\\\\\\\\\\\\\\\\\\\\\\
+  focus.append("g")
+      .attr("class", "axis axis--x")
+      .attr("transform", "translate(0," + hei + ")")
+      .call(xAxis);
+    
+  focus.append("g")
+      .attr("class", "axis axis--y")
+      .call(yAxis)
+      .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .text("price ($)")
+      .attr("fill","black");
+
+      context1.append("g")
+      .attr("class", "axis axis--y")
+      .call(yAxis2);
+
+      context.append("g")
+      .attr("class", "axis axis--x")
+      .attr("transform", "translate(0," + height2 + ")")
+      .call(xAxis2);
+////////////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+////////////////////////tracer les lignes \\\\\\\\\\\\\\\\\\\
+/////////////tracer les lignes sur le focus\\\\\\\\\\\\\\\\
+  var gold = focus.selectAll(".gold")
+      .data(golds)
+    .enter().append("g")
+      .attr("class", "gold");
+  
+  gold.append("path")
+      .attr("class", "line")
+      .attr("clip-path", "url(#clip)")
+      .attr("d", function(d) {return line(d.values); })
+      .style("stroke", function(d) { return color(d.name); });
+
+  gold.append("text")
+      .datum(function(d) { return {name: d.name, value: d.values[d.values.length - 1]}; })
+      .attr("class", "label")
+      .attr("transform", function(d) {return "translate(" + x(d.value.date) + "," + y(d.value.price) + ")"; })
+      .attr("x", 3)
+      .attr("dy", ".35em")
+      .text(function(d) { return d.name; });
+///////////////////////////////\\\\\\\\\\\\\\\\\\\\\\
+//////////////tracer les lignes sur le contexte selon l'axe x \\\\\\\\\\\\\\
+  var gold2 = context.selectAll(".gold")
+      .data(golds)
+      .enter().append("g")
+      .attr("class", "gold");
+
+  gold2.append("path")
+      .attr("class", "line")
+      .attr("d", function(d) { return   line2(d.values); })
+      .style("stroke", function(d) { return color(d.name); });
+//////////////////\\\\\\\\\\\\\\\\\\\\\
+///////////////////////tracer les lignes dans le contexte selon l'axe y\\\\\\\\\\\\\
+      var gold3 = context1.selectAll(".gold")
+      .data(golds)
+      .enter().append("g")
+      .attr("class", "gold");
+
+  gold3.append("path")
+      .attr("class", "line")
+      .attr("d", function(d) { return   line3(d.values); })
+      .style("stroke", function(d) { return color(d.name); });
+///////////////////////////\\\\\\\\\\\\\\\\\\
+// ajutement des brushs sur sa position de départ ///
+      context.append("g")
+      .attr("class", "brush")
+      .call(brush)
+      .call(brush.move, x2.range());
+
+  svg.append("rect")
+      .attr("class", "zoom")
+      .attr("width", wid)
+      .attr("height", hei)
+      .attr("transform", "translate(" + marg.left + "," + marg.top + ")")
+      .call(zoom);
+
+context1.append("g")
+      .attr("class", "y brush1")
+      .call(brush1)
+      .selectAll("rect")
+      .attr("x", 0)
+      .attr("width", wid2);
+////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\
+//////////////////***fonction du l'evenement mousemove sur les rectangles des typed d'or\\\\\\\\\\\
+  function mouseover(goldName) {
+    d3.selectAll('path.line')
+        .classed("highlight", function(d) { return d.name === goldName; })
+        .classed("fadeout", function(d) { return d.name !== goldName; });
+
+    var values = golds.filter(function(d) { return d.name === goldName; })[0].values;
+    var s= brush1.selection=d3.extent(values.map(function(d) { return d.price; }));
+   
+    brushed1(750);
+  }
+  //////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+/////////////////////la fonction de l'evenemnt mouseout \\\\\\\\\\\\\\\\\\
+  function mouseout(goldName) {
+    d3.selectAll('path.line')
+        .classed("highlight", false)
+        .classed("fadeout", false);
+  }
+  ///////////création des rectangle pour les différents types d'or pour le filtre\\\\\\\\\\\\\\\\\\
+  legendItem = legend.selectAll('.gold')
+      .data(golds.map(function(d) { return d.name; }).sort())
+    .enter().append("g")
+      .attr("transform", function(d, i) { return "translate(0," + i*18 + ")"; })
+      .attr("class", "gold legend")
+      .on("mouseover", mouseover)
+      .on("touchstart", mouseover)
+      .on("mouseout", mouseout)
+      .on("touchend", mouseout);
+
+  legendItem.append("rect")
+      .attr("width", 13)
+      .attr("height", 13)
+      .attr("fill", function(d) { return color(d); });
+
+  legendItem.append("text")
+      .attr("x", 15)
+      .attr("y", 10.5)
+      .text(function(d) { return d; });
+
+});
+////////////////////////////////////\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+///////////////////////fonction brushed sur le contexte axe Y\\\\\\\\\\\\\\\\
+function brushed1(duration) {
+  if (!duration) {
+    duration = 0;
+  }
+ 
+  if ((!d3.event.selection && brush1.selection==undefined) ||brush1.selection==0) {
+    duration = 750;
+    y.domain(y2.domain());
+
+  } else {
+     var s
+    if(d3.event.selection)  {
+      s =  d3.event.selection || y2.range() ;
+      var temp=s.map(y2.invert,y2);
+      var tomp=temp[0];
+      temp[0]=temp[1];
+      temp[1]=tomp;
+      y.domain(temp);}
+    else  {y.domain(brush1.selection); 
+    }
+  }
+
+  focus.selectAll(".gold")
+    .selectAll("path")
+    .transition().duration(duration)
+    .attr("d", function(d) { 
+        return line(d.values);
+    });
+  focus.selectAll(".label")
+    .transition().duration(duration)
+    .attr("transform", function(d) {
+      return "translate(" + x(d.value.date) + "," + y(d.value.price) + ")";
+  });
+  focus.select(".axis--y")
+    .transition().duration(duration)
+    .call(yAxis);
+    brush1.selection=undefined;
+}
+/////////////fonction brushed dur le contexte axe x\\\\\\\\\\\\\\\\\
+function brushed() {
+  if (d3.event.sourceEvent && d3.event.sourceEvent.type === "zoom") return; // ignore brush-by-zoom
+  var s = d3.event.selection || x2.range();
+  x.domain(s.map(x2.invert, x2));
+  focus.selectAll(".gold")
+    .selectAll("path")
+    .attr("d", function(d) { return line(d.values); });
+  focus.select(".axis--x").call(xAxis);
+  svg.select(".zoom").call(zoom.transform, d3.zoomIdentity
+      .scale(wid / (s[1] - s[0]))
+      .translate(-s[0], 0));
+}
+////////////////////////fonction zoomed \\\\\\\\\\\\\\\\\\\\\\\
+function zoomed() {
+  if (d3.event.sourceEvent && d3.event.sourceEvent.type === "brush") return; // ignore zoom-by-brush
+  var t = d3.event.transform;
+  x.domain(t.rescaleX(x2).domain());
+  focus.selectAll(".gold")
+    .selectAll("path")
+    .attr("d", function(d) { return line(d.values); });
+  focus.select(".axis--x").call(xAxis);
+ context.select(".brush").call(brush.move, x.range().map(t.invertX, t));
+}
+
+</script>
+</body>
+
+</html>
